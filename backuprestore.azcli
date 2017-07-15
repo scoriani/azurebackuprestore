@@ -1,0 +1,38 @@
+az login 
+
+#
+# Backup
+#
+
+# Create resource group
+az group create --name testsap --location westeurope
+# Create new VM
+az vm create --resource-group testsap --name testsapvm --image UbuntuLTS --admin-username scoriani --ssh-key-value "xxxx" --location westeurope
+# Add data disk
+az vm disk attach -g testsap --vm-name testsapvm --disk data --new --size-gb 100
+# Create snapshot
+az snapshot create -g testsap -n snapshot01 --source data
+# Create storage account
+az storage account create -g testsap --sku Standard_LRS --location westeurope --name testsapstorage
+# Create storage container
+az storage container create --account-name testsapstorage --account-key v6jz1WeAX6ZNZevYEW4eM7RnfFP7nhQ3Z8NIMQ+a54NK94vesRqqxTUpMvia9QiVhH6feNhzYvTt7IzkjTfg+A== --name backups --public-access blob
+# Access snapshot underlying SAS URI
+az snapshot grant-access -g testsap --name snapshot01 --duration-in-seconds 3600
+# Copy snaphost to blob storage
+az storage blob copy start --account-name testsapstorage --account-key "v6jz1WeAX6ZNZevYEW4eM7RnfFP7nhQ3Z8NIMQ+a54NK94vesRqqxTUpMvia9QiVhH6feNhzYvTt7IzkjTfg+A=="  --source-uri "https://md-fbr1p4c5vlk1.blob.core.windows.net/dgfd0qdznjpw/abcd?sv=2016-05-31&sr=b&si=9f7470f6-0fcd-4467-9d22-43bbb46f92df&sig=WQ0wCXICIL%2BjKcMHF%2FxhAYGW4ASue7PTGMgQlnrE%2Bww%3D" --destination-container backups --destination-blob backup01.vhd
+
+# Show copied blob
+az storage blob show --account-name testsapstorage --account-key "v6jz1WeAX6ZNZevYEW4eM7RnfFP7nhQ3Z8NIMQ+a54NK94vesRqqxTUpMvia9QiVhH6feNhzYvTt7IzkjTfg+A=="  --container-name backups --name backup01.bak
+
+#
+# Restore
+#
+
+# Restore blob into a new disk
+az disk create -n restore01 -g testsap --source https://testsapstorage.blob.core.windows.net/backups/backup01.vhd
+
+# Attach disk to the VM
+az vm disk attach --disk restore01 -g testsap --vm-name testsapvm
+
+# Cleanup
+az group delete --name testsap
